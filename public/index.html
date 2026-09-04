@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khana Khazana – Live Poll</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Inter',sans-serif;
+      background:linear-gradient(145deg,#f6f9fc,#eef2f7);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:1.5rem;
+    }
+    .poll-card {
+      max-width:720px;
+      width:100%;
+      background:rgba(255,255,255,0.85);
+      backdrop-filter:blur(16px);
+      -webkit-backdrop-filter:blur(16px);
+      border-radius:2.5rem;
+      padding:2.25rem 2.5rem 2.5rem;
+      box-shadow:0 30px 60px -20px rgba(0,20,40,0.25),0 8px 24px -6px rgba(0,0,0,0.06),inset 0 1px 0 rgba(255,255,255,0.7);
+      border:1px solid rgba(255,255,255,0.5);
+    }
+    @media (max-width:500px){ .poll-card{ padding:1.5rem 1.25rem 1.75rem; border-radius:1.75rem; } }
+    .poll-header{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.75rem; flex-wrap:wrap; gap:0.75rem; }
+    .poll-title-group{ display:flex; flex-direction:column; gap:0.2rem; }
+    .poll-badge{ display:inline-flex; align-items:center; gap:0.4rem; background:rgba(99,102,241,0.12); color:#4f46e5; font-size:0.7rem; font-weight:600; letter-spacing:0.03em; text-transform:uppercase; padding:0.25rem 0.7rem; border-radius:100px; width:fit-content; border:1px solid rgba(99,102,241,0.15); }
+    .poll-badge .dot{ display:inline-block; width:6px; height:6px; background:#22c55e; border-radius:50%; animation:pulse-dot 2s ease-in-out infinite; }
+    @keyframes pulse-dot{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.5; transform:scale(0.85); } }
+    .poll-title{ font-size:1.65rem; font-weight:700; letter-spacing:-0.02em; color:#0b1a2f; line-height:1.2; margin-top:0.3rem; }
+    .poll-meta{ display:flex; align-items:center; gap:1rem; font-size:0.8rem; color:#5b6d89; font-weight:500; margin-top:0.1rem; }
+    .poll-meta span{ display:flex; align-items:center; gap:0.3rem; }
+    .total-votes-badge{ background:#eef2f7; padding:0.2rem 0.8rem; border-radius:100px; font-weight:600; color:#1e2a44; }
+    .poll-options{ display:flex; flex-direction:column; gap:0.9rem; margin:1.5rem 0 2rem; }
+    .option-item{ display:flex; flex-direction:column; gap:0.3rem; cursor:pointer; transition:transform 0.15s ease; position:relative; -webkit-tap-highlight-color:transparent; }
+    .option-item:active{ transform:scale(0.98); }
+    .option-row{ display:flex; align-items:center; gap:0.9rem; padding:0.6rem 0.9rem; background:rgba(255,255,255,0.7); border-radius:1.25rem; border:1.5px solid rgba(203,213,225,0.5); transition:all 0.2s ease; position:relative; z-index:2; backdrop-filter:blur(4px); min-height:60px; width:100%; }
+    .option-item:hover .option-row{ border-color:#a5b4cb; background:rgba(255,255,255,0.9); box-shadow:0 4px 12px rgba(0,0,0,0.03); }
+    .option-item.active .option-row{ border-color:#4f46e5; background:rgba(79,70,229,0.06); box-shadow:0 0 0 3px rgba(79,70,229,0.12); }
+    .vote-bar-bg{ position:absolute; inset:0; border-radius:1.25rem; overflow:hidden; z-index:0; background:rgba(241,245,249,0.5); pointer-events:none; }
+    .vote-bar-fill{ height:100%; width:0%; border-radius:1.25rem; background:linear-gradient(90deg,#818cf8,#4f46e5); transition:width 0.8s cubic-bezier(0.22,1,0.36,1); box-shadow:inset 0 1px 2px rgba(255,255,255,0.3); will-change:transform; transform:translateZ(0); }
+    .option-item:nth-child(1) .vote-bar-fill{ background:linear-gradient(90deg,#818cf8,#4f46e5); }
+    .option-item:nth-child(2) .vote-bar-fill{ background:linear-gradient(90deg,#34d399,#10b981); }
+    .option-item:nth-child(3) .vote-bar-fill{ background:linear-gradient(90deg,#fbbf24,#f59e0b); }
+    .option-item:nth-child(4) .vote-bar-fill{ background:linear-gradient(90deg,#f472b6,#ec4899); }
+    .option-item:nth-child(5) .vote-bar-fill{ background:linear-gradient(90deg,#60a5fa,#3b82f6); }
+    .option-item:nth-child(6) .vote-bar-fill{ background:linear-gradient(90deg,#a78bfa,#8b5cf6); }
+    .option-item:nth-child(7) .vote-bar-fill{ background:linear-gradient(90deg,#f97316,#ea580c); }
+    .option-item:nth-child(8) .vote-bar-fill{ background:linear-gradient(90deg,#06b6d4,#0891b2); }
+    .option-item:nth-child(9) .vote-bar-fill{ background:linear-gradient(90deg,#ec4899,#db2777); }
+    .option-item:nth-child(10) .vote-bar-fill{ background:linear-gradient(90deg,#84cc16,#65a30d); }
+    .option-item:nth-child(11) .vote-bar-fill{ background:linear-gradient(90deg,#d946ef,#a21caf); }
+    .option-content{ display:flex; align-items:center; justify-content:space-between; width:100%; position:relative; z-index:1; gap:0.75rem; flex-wrap:wrap; pointer-events:none; }
+    .option-label{ display:flex; align-items:center; gap:0.65rem; font-weight:600; font-size:0.95rem; color:#0b1a2f; letter-spacing:-0.01em; flex:1; min-width:100px; pointer-events:none; }
+    .option-emoji{ font-size:1.3rem; line-height:1; width:1.6rem; text-align:center; flex-shrink:0; }
+    .option-stats{ display:flex; align-items:center; gap:1rem; font-size:0.85rem; font-weight:500; flex-shrink:0; pointer-events:none; }
+    .option-votes{ color:#1e2a44; font-weight:600; min-width:2.2rem; text-align:right; }
+    .option-percent{ min-width:3.2rem; text-align:right; font-weight:700; color:#0b1a2f; letter-spacing:-0.01em; font-variant-numeric:tabular-nums; }
+    .vote-selector{ width:22px; height:22px; border-radius:50%; border:2px solid #cbd5e1; background:white; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s ease; position:relative; pointer-events:none; }
+    .option-item.active .vote-selector{ border-color:#4f46e5; background:#4f46e5; }
+    .option-item.active .vote-selector::after{ content:''; width:8px; height:8px; background:white; border-radius:50%; transform:scale(0); animation:pop-check 0.25s ease forwards; }
+    @keyframes pop-check{ 0%{ transform:scale(0); } 70%{ transform:scale(1.25); } 100%{ transform:scale(1); } }
+    .poll-actions{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-top:0.5rem; padding-top:1.25rem; border-top:1.5px solid rgba(203,213,225,0.4); }
+    .btn-group{ display:flex; gap:0.6rem; flex-wrap:wrap; }
+    .btn{ display:inline-flex; align-items:center; gap:0.5rem; font-family:'Inter',sans-serif; font-weight:600; font-size:0.8rem; padding:0.5rem 1.1rem; border-radius:100px; border:none; cursor:pointer; transition:all 0.2s ease; background:#f1f5f9; color:#1e2a44; text-decoration:none; white-space:nowrap; }
+    .btn:hover{ background:#e2e8f0; transform:translateY(-1px); box-shadow:0 4px 10px rgba(0,0,0,0.04); }
+    .btn:active{ transform:translateY(0); box-shadow:none; }
+    .btn-success{ background:#10b981; color:white; box-shadow:0 4px 12px rgba(16,185,129,0.25); }
+    .btn-success:hover{ background:#059669; box-shadow:0 6px 18px rgba(16,185,129,0.3); }
+    .btn-outline{ background:transparent; border:1.5px solid #cbd5e1; }
+    .btn-outline:hover{ background:#f8fafc; border-color:#94a3b8; }
+    .toast{ position:fixed; bottom:2rem; left:50%; transform:translateX(-50%) translateY(1.5rem); background:#0b1a2f; color:white; padding:0.6rem 1.6rem; border-radius:100px; font-weight:500; font-size:0.85rem; box-shadow:0 12px 32px rgba(0,0,0,0.2); opacity:0; visibility:hidden; transition:all 0.35s cubic-bezier(0.22,1,0.36,1); z-index:999; pointer-events:none; }
+    .toast.show{ opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); }
+    @media (max-width:500px){ .poll-title{ font-size:1.3rem; } .option-label{ font-size:0.85rem; gap:0.4rem; } .option-emoji{ font-size:1.1rem; width:1.4rem; } .option-stats{ font-size:0.75rem; gap:0.5rem; } .option-percent{ min-width:2.8rem; } .option-votes{ min-width:1.8rem; } .option-row{ padding:0.5rem 0.7rem; min-height:52px; } .poll-actions{ flex-direction:column; align-items:stretch; } .btn-group{ justify-content:center; } .btn{ font-size:0.75rem; padding:0.4rem 0.9rem; } }
+    @media (max-width:400px){ .option-content{ flex-wrap:wrap; } .option-stats{ width:100%; justify-content:flex-end; } }
+    .status{ text-align:center; color:#5b6d89; font-size:0.8rem; margin-top:0.5rem; }
+  </style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="poll-card">
+  <div class="poll-header">
+    <div class="poll-title-group">
+      <div class="poll-badge"><span class="dot"></span> Live Poll</div>
+      <h1 class="poll-title">🍛 Khana Khazana<br />Who should be eliminated?</h1>
+    </div>
+    <div class="poll-meta">
+      <span>
+        <span style="font-size:1rem;">👥</span>
+        <span class="total-votes-badge" id="totalVotesDisplay">0</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="poll-options" id="pollOptions" role="radiogroup"></div>
+
+  <div class="poll-actions">
+    <div class="btn-group">
+      <button class="btn btn-success" id="copyBtn"><span class="btn-icon">📋</span> Copy Results</button>
+    </div>
+    <button class="btn btn-outline" id="randomVoteBtn"><span class="btn-icon">🎲</span> Random Vote</button>
+  </div>
+  <div class="status" id="statusMessage">🟢 Connecting...</div>
+</div>
+
+<script>
+  (function() {
+    const labels = [
+      'Sohel', 'Sahil kim', 'Sahil surat', 'Saif', 'Babu',
+      'Javed', 'Rizwan', 'Hafiz', 'Fajal', 'Faizal', 'Sameer'
+    ];
+
+    const pollOptions = document.getElementById('pollOptions');
+    const totalVotesDisplay = document.getElementById('totalVotesDisplay');
+    const toast = document.getElementById('toast');
+    const copyBtn = document.getElementById('copyBtn');
+    const randomBtn = document.getElementById('randomVoteBtn');
+    const statusMsg = document.getElementById('statusMessage');
+
+    const socket = io();
+
+    let votes = labels.map(() => 0);
+    let userVoteIndex = null;
+    let totalVotes = 0;
+
+    function renderOptions() {
+      let html = '';
+      const emojis = ['🤷','🧑','🌆','🦁','👶','💪','😎','📖','🌟','✨','🤝'];
+      labels.forEach((label, idx) => {
+        html += `
+          <div class="option-item" data-index="${idx}">
+            <div class="vote-bar-bg"><div class="vote-bar-fill" style="width:0%;"></div></div>
+            <div class="option-row">
+              <div class="option-content">
+                <span class="option-label"><span class="option-emoji">${emojis[idx]}</span> ${label}</span>
+                <span class="option-stats">
+                  <span class="option-votes">0</span>
+                  <span class="option-percent">0%</span>
+                  <span class="vote-selector" aria-hidden="true"></span>
+                </span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      pollOptions.innerHTML = html;
+    }
+
+    function updateUI() {
+      totalVotes = votes.reduce((a, b) => a + b, 0);
+      const items = pollOptions.children;
+      for (let i = 0; i < items.length; i++) {
+        const v = votes[i] || 0;
+        const pct = totalVotes === 0 ? 0 : (v / totalVotes) * 100;
+        const voteSpan = items[i].querySelector('.option-votes');
+        const pctSpan = items[i].querySelector('.option-percent');
+        const fill = items[i].querySelector('.vote-bar-fill');
+        voteSpan.textContent = v;
+        pctSpan.textContent = totalVotes === 0 ? '0%' : pct.toFixed(1) + '%';
+        if (fill) fill.style.width = (totalVotes === 0 ? 0 : pct) + '%';
+        const isActive = (userVoteIndex === i);
+        items[i].classList.toggle('active', isActive);
+        items[i].setAttribute('aria-checked', isActive ? 'true' : 'false');
+      }
+      totalVotesDisplay.textContent = totalVotes;
+    }
+
+    let toastTimeout = null;
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    socket.on('initial', (data) => {
+      votes = data.votes;
+      userVoteIndex = data.userVotes[socket.id] ?? null;
+      updateUI();
+      statusMsg.textContent = '🟢 Live – connected';
+    });
+
+    socket.on('update', (data) => {
+      votes = data.votes;
+      userVoteIndex = data.userVotes[socket.id] ?? null;
+      updateUI();
+    });
+
+    socket.on('connect', () => {
+      statusMsg.textContent = '🟢 Connected';
+    });
+
+    socket.on('disconnect', () => {
+      statusMsg.textContent = '🔴 Disconnected – reconnecting...';
+    });
+
+    function castVote(index) {
+      if (index < 0 || index >= labels.length) return;
+      socket.emit('vote', index);
+    }
+
+    function randomVote() {
+      const idx = Math.floor(Math.random() * labels.length);
+      castVote(idx);
+    }
+
+    function copyResults() {
+      const total = totalVotes;
+      const lines = [];
+      lines.push(`📊 Khana Khazana – Elimination Poll (${total} votes total)`);
+      lines.push('');
+      for (let i = 0; i < labels.length; i++) {
+        const v = votes[i] || 0;
+        const pct = total === 0 ? 0 : (v / total) * 100;
+        const bar = '▰'.repeat(Math.round(pct / 4)) + '▱'.repeat(25 - Math.round(pct / 4));
+        lines.push(`${labels[i]}  ${v} vote${v!==1?'s':''}  ${pct.toFixed(1)}%`);
+        lines.push(`  ${bar}`);
+      }
+      lines.push('');
+      lines.push('🔗 Vote now and eliminate!');
+      const text = lines.join('\n');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('✅ Results copied!'))
+          .catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('✅ Results copied!');
+      } catch (e) {
+        showToast('⚠️ Could not copy');
+      }
+      document.body.removeChild(ta);
+    }
+
+    pollOptions.addEventListener('click', function(e) {
+      const item = e.target.closest('.option-item');
+      if (!item) return;
+      const idx = parseInt(item.dataset.index, 10);
+      if (!isNaN(idx)) castVote(idx);
+    });
+
+    pollOptions.addEventListener('keydown', function(e) {
+      if (e.key === ' ' || e.key === 'Enter') {
+        const item = e.target.closest('.option-item');
+        if (!item) return;
+        e.preventDefault();
+        const idx = parseInt(item.dataset.index, 10);
+        if (!isNaN(idx)) castVote(idx);
+      }
+    });
+
+    randomBtn.addEventListener('click', randomVote);
+    copyBtn.addEventListener('click', copyResults);
+
+    renderOptions();
+    updateUI();
+  })();
+</script>
+</body>
+</html>
